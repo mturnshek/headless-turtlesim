@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "abab": "^2.0.3",
+    "canvas": "^2.6.1",
+    "rosnodejs": "^3.0.1"
+  }
+}

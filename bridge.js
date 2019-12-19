@@ -51,6 +51,14 @@ const f = async () => {
         );
         context.restore();
 
+        if (spin && spinCount < messageSpinThreshold) {
+            context.fillStyle = "white";
+            context.fillText(
+                "\u{30C1}\u{30BD}\u{30B2}\u{30BD} \u{30C8}\u{30C3}\u{30D1}",
+                cx - 34,
+                cy - 30
+            );
+        }
         const dataUrl = canvas.toDataURL();
         const base64 = dataUrl.split("base64,")[1];
         const buffer = atob(base64)
@@ -80,30 +88,24 @@ const f = async () => {
             : southWestQuadrantPublisher.publish({ data: false });
     };
 
-    let seq = 0;
     const handlePose = pose => {
-        seq += 1;
-        if (seq % 2 !== 0) {
-            return; // only render and publish every other frame - ~30fps
-        }
         renderAndPublishCompressedImage(pose);
         handleQuadrantIndicators(pose);
     };
 
     let spin = false;
+    let spinCount = 0;
     let lx = 0.0;
     let az = 0.0;
-    let dlx = 0.01;
-    let daz = 0.022;
+    const dlx = 0.01;
+    const daz = 0.022;
+    const maxSpinCount = 20000;
+    const messageSpinThreshold = 30;
     setInterval(() => {
         if (spin) {
-            lx += dlx;
-            az += daz;
-            if (lx > dlx * 20000) {
-                lx = dlx * 20000;
-            }
-            if (az > daz * 20000) {
-                az = daz * 20000;
+            if (spinCount < maxSpinCount) {
+                lx += dlx;
+                az += daz;
             }
             const twist = {
                 linear: {
@@ -118,9 +120,11 @@ const f = async () => {
                 }
             };
             commandVelocityPublisher.publish(twist);
+            spinCount += 1;
         } else {
             lx = 0.0;
             az = 0.0;
+            spinCount = 0;
         }
     }, 50);
 

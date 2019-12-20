@@ -3,6 +3,10 @@ const { createCanvas, loadImage } = require("canvas");
 const { atob } = require("abab");
 
 const f = async () => {
+    // Load constants
+    const poseRange = 11.1; // turtlesim constant
+    const turtleImage = await loadImage("lunar.png");
+
     // Set up ROS node and publishers
     await ros.initNode("/fbridge");
     const node = ros.nh;
@@ -23,10 +27,19 @@ const f = async () => {
         "geometry_msgs/Twist"
     );
 
-    const poseRange = 11.1; // turtlesim constant
-    const turtleImage = await loadImage("lunar.png");
-    let trail = false;
+    // Publish a boolean true or false conditional on if the turtle is in SW or NE quadrants.
+    const handleQuadrantIndicators = pose => {
+        pose.x > poseRange / 2 && pose.y > poseRange / 2
+            ? northEastQuadrantPublisher.publish({ data: true })
+            : northEastQuadrantPublisher.publish({ data: false });
 
+        pose.x < poseRange / 2 && pose.y < poseRange / 2
+            ? southWestQuadrantPublisher.publish({ data: true })
+            : southWestQuadrantPublisher.publish({ data: false });
+    };
+
+    // Render and publish a compressed image representing the map and turtle.
+    let trail = false;
     const canvas = createCanvas(640, 640);
     const context = canvas.getContext("2d");
     const renderAndPublishCompressedImage = pose => {
@@ -51,7 +64,7 @@ const f = async () => {
         );
         context.restore();
 
-        if (spin && spinCount < messageSpinThreshold) {
+        if (messageOn) {
             context.fillStyle = "white";
             context.fillText(
                 "\u{30C1}\u{30BD}\u{30B2}\u{30BD} \u{30C8}\u{30C3}\u{30D1}",
@@ -78,34 +91,32 @@ const f = async () => {
         compressedImagePublisher.publish(compressedImage);
     };
 
-    const handleQuadrantIndicators = pose => {
-        pose.x > poseRange / 2 && pose.y > poseRange / 2
-            ? northEastQuadrantPublisher.publish({ data: true })
-            : northEastQuadrantPublisher.publish({ data: false });
-
-        pose.x < poseRange / 2 && pose.y < poseRange / 2
-            ? southWestQuadrantPublisher.publish({ data: true })
-            : southWestQuadrantPublisher.publish({ data: false });
-    };
-
+    // Respond to a pose from turtlesim_node.
     const handlePose = pose => {
         renderAndPublishCompressedImage(pose);
         handleQuadrantIndicators(pose);
     };
 
+    // Continually check if "spin" mode is activated.
+    // If so, continually add to the turtle's linear and angular velocity
+    // until the maxSpinCount is reached.
     let spin = false;
+    let messageOn = false;
     let spinCount = 0;
     let lx = 0.0;
     let az = 0.0;
     const dlx = 0.01;
     const daz = 0.022;
-    const maxSpinCount = 20000;
-    const messageSpinThreshold = 30;
+    const maxSpinCount = 4000;
     setInterval(() => {
         if (spin) {
             if (spinCount < maxSpinCount) {
                 lx += dlx;
                 az += daz;
+            } else {
+                spin = false;
+                messageOn = true;
+                setTimeout(() => (messageOn = false), 3000);
             }
             const twist = {
                 linear: {
@@ -129,10 +140,10 @@ const f = async () => {
     }, 50);
 
     node.subscribe("/turtle1/pose", "turtlesim/Pose", pose => handlePose(pose));
-    node.subscribe("/trail_on", "std_msgs/Bool", _ => (trail = true));
-    node.subscribe("/trail_off", "std_msgs/Bool", _ => (trail = false));
     node.subscribe("/spin_on", "std_msgs/Bool", _ => (spin = true));
     node.subscribe("/spin_off", "std_msgs/Bool", _ => (spin = false));
+    node.subscribe("/trail_on", "std_msgs/Bool", _ => (trail = true));
+    node.subscribe("/trail_off", "std_msgs/Bool", _ => (trail = false));
 };
 
 (async () => {

@@ -3,6 +3,9 @@ const { createCanvas, loadImage } = require("canvas");
 const { atob } = require("abab");
 
 const poseRange = 11.1; // turtlesim constant
+const CompressedImage = "sensor_msgs/CompressedImage";
+const Bool = "std_msgs/Bool";
+const Twist = "geometry_msgs/Twist";
 
 const drawBackground = (context, canvas, trail) => {
     context.save();
@@ -66,31 +69,18 @@ const getCompressedImage = canvas => {
 
 const run = async () => {
     // Set up ROS node and publishers
-    await ros.initNode("/fbridge");
+    await ros.initNode("/headless_turtlesim");
     const node = ros.nh;
-    const compressedImagePublisher = node.advertise(
-        "/image/compressed",
-        "sensor_msgs/CompressedImage"
-    );
-    const northEastQuadrantPublisher = node.advertise(
-        "/in_northeast_quadrant",
-        "std_msgs/Bool"
-    );
-    const southWestQuadrantPublisher = node.advertise(
-        "/in_southwest_quadrant",
-        "std_msgs/Bool"
-    );
-    const commandVelocityPublisher = node.advertise(
-        "/turtle1/cmd_vel",
-        "geometry_msgs/Twist"
-    );
+    const compressedImagePublisher = node.advertise("/image", CompressedImage);
+    const northEastQuadrantPublisher = node.advertise("/northeast_quad", Bool);
+    const southWestQuadrantPublisher = node.advertise("/southwest_quad", Bool);
+    const commandVelocityPublisher = node.advertise("/turtle1/cmd_vel", Twist);
 
     // Publish a boolean true or false conditional on if the turtle is in SW or NE quadrants.
     const handleQuadrantIndicators = pose => {
         pose.x > poseRange / 2 && pose.y > poseRange / 2
             ? northEastQuadrantPublisher.publish({ data: true })
             : northEastQuadrantPublisher.publish({ data: false });
-
         pose.x < poseRange / 2 && pose.y < poseRange / 2
             ? southWestQuadrantPublisher.publish({ data: true })
             : southWestQuadrantPublisher.publish({ data: false });

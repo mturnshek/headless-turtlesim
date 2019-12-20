@@ -2,11 +2,69 @@ const ros = require("rosnodejs");
 const { createCanvas, loadImage } = require("canvas");
 const { atob } = require("abab");
 
-const f = async () => {
-    // Load constants
-    const poseRange = 11.1; // turtlesim constant
-    const turtleImage = await loadImage("lunar.png");
+const poseRange = 11.1; // turtlesim constant
 
+const drawBackground = (context, canvas, trail) => {
+    context.save();
+    context.globalAlpha = trail ? 0.12 : 1.0;
+    context.fillStyle = "black";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.restore();
+};
+
+const drawTurtle = (context, image, cx, cy, theta) => {
+    context.save();
+    context.globalAlpha = 1.0;
+    context.translate(cx, cy);
+    context.rotate(Math.PI / 2 - theta);
+    context.drawImage(
+        image,
+        -image.width / 2,
+        -image.height / 2,
+        (width = image.width),
+        (height = image.height)
+    );
+    context.restore();
+};
+
+const drawMessage = context => {
+    context.save();
+    context.fillStyle = "white";
+    context.fillText(
+        "\u{30C1}\u{30BD}\u{30B2}\u{30BD} \u{30C8}\u{30C3}\u{30D1}",
+        cx - 34,
+        cy - 30
+    );
+    context.restore();
+};
+
+const getTranslatedCoordinates = (canvas, x, y) => {
+    const cx = Math.floor((x * canvas.width) / poseRange);
+    const cy = Math.floor(canvas.height - (canvas.height * y) / poseRange);
+    return { cx, cy };
+};
+
+const getBuffer = canvas => {
+    const dataUrl = canvas.toDataURL();
+    const base64 = dataUrl.split("base64,")[1];
+    return atob(base64)
+        .split("")
+        .map(_ => _.charCodeAt(0));
+};
+
+const getCompressedImage = canvas => {
+    return {
+        header: {
+            seq: 0,
+            stamp: Date.now(),
+            frame_id: ""
+        },
+        format: "png",
+        data: getBuffer(canvas)
+    };
+};
+
+const run = async () => {
     // Set up ROS node and publishers
     await ros.initNode("/fbridge");
     const node = ros.nh;
@@ -39,56 +97,16 @@ const f = async () => {
     };
 
     // Render and publish a compressed image representing the map and turtle.
-    let trail = false;
+    let trail = false; // if on, the turtle leaves a glowing trail in its wake.
+    const turtleImage = await loadImage("lunar.png");
     const canvas = createCanvas(640, 640);
     const context = canvas.getContext("2d");
     const renderAndPublishCompressedImage = pose => {
-        context.save();
-        context.globalAlpha = trail ? 0.12 : 1.0;
-        context.fillStyle = "black";
-        context.fillRect(0, 0, canvas.width, canvas.height);
-        const cx = Math.floor((pose.x * canvas.width) / poseRange);
-        const cy = Math.floor(
-            canvas.height - (canvas.height * pose.y) / poseRange
-        );
-
-        context.translate(cx, cy);
-        context.rotate(Math.PI / 2 - pose.theta);
-        context.globalAlpha = 1.0;
-        context.drawImage(
-            turtleImage,
-            -turtleImage.width / 2,
-            -turtleImage.height / 2,
-            (width = turtleImage.width),
-            (height = turtleImage.height)
-        );
-        context.restore();
-
-        if (messageOn) {
-            context.fillStyle = "white";
-            context.fillText(
-                "\u{30C1}\u{30BD}\u{30B2}\u{30BD} \u{30C8}\u{30C3}\u{30D1}",
-                cx - 34,
-                cy - 30
-            );
-        }
-        const dataUrl = canvas.toDataURL();
-        const base64 = dataUrl.split("base64,")[1];
-        const buffer = atob(base64)
-            .split("")
-            .map(_ => _.charCodeAt(0));
-
-        const compressedImage = {
-            header: {
-                seq: 0,
-                stamp: Date.now(),
-                frame_id: ""
-            },
-            format: "png",
-            data: buffer
-        };
-
-        compressedImagePublisher.publish(compressedImage);
+        const { cx, cy } = getTranslatedCoordinates(canvas, pose.x, pose.y);
+        drawBackground(context, canvas, trail);
+        drawTurtle(context, turtleImage, cx, cy, pose.theta);
+        messageOn ? drawMessage() : false;
+        compressedImagePublisher.publish(getCompressedImage(canvas));
     };
 
     // Respond to a pose from turtlesim_node.
@@ -148,7 +166,7 @@ const f = async () => {
 
 (async () => {
     try {
-        f();
+        run();
     } catch (e) {
         console.log(e);
     }

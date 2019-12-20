@@ -30,7 +30,7 @@ const drawTurtle = (context, image, cx, cy, theta) => {
     context.restore();
 };
 
-const drawMessage = context => {
+const drawMessage = (context, cx, cy) => {
     context.save();
     context.fillStyle = "white";
     context.fillText(
@@ -110,7 +110,7 @@ const run = async () => {
         const { cx, cy } = getTranslatedCoordinates(canvas, pose.x, pose.y);
         drawBackground(context, canvas, trail);
         drawTurtle(context, turtleImage, cx, cy, pose.theta);
-        messageOn ? drawMessage() : false;
+        messageOn ? drawMessage(context, cx, cy) : false;
         compressedImagePublisher.publish(generateCompressedImage(canvas));
     };
 

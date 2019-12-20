@@ -55,7 +55,7 @@ const getBuffer = canvas => {
         .map(_ => _.charCodeAt(0));
 };
 
-const getCompressedImage = canvas => {
+const generateCompressedImage = canvas => {
     return {
         header: {
             seq: 0,
@@ -64,6 +64,21 @@ const getCompressedImage = canvas => {
         },
         format: "png",
         data: getBuffer(canvas)
+    };
+};
+
+const generateTwist = (linearX, angularZ) => {
+    return {
+        linear: {
+            x: linearX,
+            y: 0,
+            z: 0
+        },
+        angular: {
+            x: 0,
+            y: 0,
+            z: angularZ
+        }
     };
 };
 
@@ -96,7 +111,7 @@ const run = async () => {
         drawBackground(context, canvas, trail);
         drawTurtle(context, turtleImage, cx, cy, pose.theta);
         messageOn ? drawMessage() : false;
-        compressedImagePublisher.publish(getCompressedImage(canvas));
+        compressedImagePublisher.publish(generateCompressedImage(canvas));
     };
 
     // Respond to a pose from turtlesim_node.
@@ -105,47 +120,33 @@ const run = async () => {
         handleQuadrantIndicators(pose);
     };
 
-    // Continually check if "spin" mode is activated.
-    // If so, continually add to the turtle's linear and angular velocity
-    // until the maxSpinCount is reached.
+    // Make the turtle spin.
     let spin = false;
-    let messageOn = false;
     let spinCount = 0;
-    let lx = 0.0;
-    let az = 0.0;
-    const dlx = 0.01;
-    const daz = 0.022;
     const maxSpinCount = 4000;
+    const spinterval = 50; // maxSpinCount * spinterval is total turtle spin duration
+    let [linearX, angularZ] = [0.0, 0.0];
+    const [dLinearX, dAngularZ] = [0.01, 0.022]; // acceleration, the ratio controls the circle's radius
+    let messageOn = false;
+    const messageUptime = 3000;
     setInterval(() => {
         if (spin) {
             if (spinCount < maxSpinCount) {
-                lx += dlx;
-                az += daz;
+                linearX += dLinearX;
+                angularZ += dAngularZ;
             } else {
                 spin = false;
                 messageOn = true;
-                setTimeout(() => (messageOn = false), 3000);
+                setTimeout(() => (messageOn = false), messageUptime);
             }
-            const twist = {
-                linear: {
-                    x: lx,
-                    y: 0,
-                    z: 0
-                },
-                angular: {
-                    x: 0,
-                    y: 0,
-                    z: az
-                }
-            };
-            commandVelocityPublisher.publish(twist);
+            commandVelocityPublisher.publish(generateTwist(linearX, angularZ));
             spinCount += 1;
         } else {
-            lx = 0.0;
-            az = 0.0;
+            linearX = 0.0;
+            angularZ = 0.0;
             spinCount = 0;
         }
-    }, 50);
+    }, spinterval);
 
     node.subscribe("/turtle1/pose", "turtlesim/Pose", pose => handlePose(pose));
     node.subscribe("/spin_on", "std_msgs/Bool", _ => (spin = true));
